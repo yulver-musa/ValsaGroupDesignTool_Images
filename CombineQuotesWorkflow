@@ -1,0 +1,195 @@
+getAccessToken = Global_Constants[Constant_Variable_Name == "Zoho Books Access Token"].Constant_Variable_Output;
+getRefreshToken = Global_Constants[Constant_Variable_Name == "Zoho Books Refresh Token"].Constant_Variable_Output;
+// ------------------------------- Test Access Token Validity --------------------------------
+// Define necessary variables
+organization_id = "836315622";
+access_token = getAccessToken;
+// Test API URL
+url = "https://www.zohoapis.com/books/v3/estimates?organization_id=" + organization_id;
+// Set headers
+headers = Map();
+headers.put("Authorization","Zoho-oauthtoken " + access_token);
+// Send GET request to test the token
+response = invokeurl
+[
+	url :url
+	type :GET
+	headers:headers
+];
+// Check if the token is valid
+if(response.get("code") == 0)
+{
+	info "Access token is valid.";
+}
+else
+{
+	// Define variables for refresh token, client ID, and client secret
+	refresh_token = getRefreshToken;
+	client_id = "1000.AK1ZEJIS1L4MCC2IF45LGQUBZH1N3S";
+	client_secret = "dbd2d5a343dd3c329ec91a2b54f282645651b9229e";
+	// Set up the URL for the token request
+	url = "https://accounts.zoho.com/oauth/v2/token";
+	// Set up the parameters
+	params = Map();
+	params.put("refresh_token",refresh_token);
+	params.put("client_id",client_id);
+	params.put("client_secret",client_secret);
+	params.put("grant_type","refresh_token");
+	// Set headers
+	headers = Map();
+	headers.put("Content-Type","application/x-www-form-urlencoded");
+	// Make the POST request
+	response = invokeurl
+	[
+		url :url
+		type :POST
+		parameters:params
+		headers:headers
+	];
+	// Output the response
+	info "Access token is invalid or expired. New Access token granted.";
+	getConstant = Global_Constants[Constant_Variable_Name == "Zoho Books Access Token"];
+	getConstant.Constant_Variable_Output=response.get("access_token");
+}
+// ---------------------------------------------------------------------------------------------------------------------
+customerID = input.To_Client.Customer_ID;
+response = zoho.books.getRecords("Customers","836315622","customer_id=" + customerID);
+contactList = response.get("contacts");
+if(contactList.isEmpty() || customerID = Null || customerID == "")
+{
+	alert "Client not found in Zoho Books";
+}
+else
+{
+	// ----------------------------------- Use latest Access Token to Create an Estimate in Zoho Books ---------------------------------
+	// Define necessary variables
+	getAccessToken = Global_Constants[Constant_Variable_Name == "Zoho Books Access Token"];
+	organization_id = "836315622";
+	access_token = getAccessToken.Constant_Variable_Output;
+	// Prepare the estimate data as JSON
+	estimate_data = Map();
+	estimate_data.put("customer_id",customerID);
+	// ID of the customer for the estimate
+	lineItem = List();
+	count = 0;
+	stringNotes = "";
+	for each  Item in input.Select_Quotes
+	{
+		count = count + 1;
+		GetString = Item.toString();
+		pos2 = GetString.find("-");
+		getSQ = GetString.mid(4,pos2 - 1);
+		if(Solution == "Ground Mount Solution")
+		{
+			getRecordGMS = Ground_Mount_Solution[Quote_SQ_Number == getSQ];
+			stringPanels = getRecordGMS.Width + " x " + getRecordGMS.Length_field + " x " + getRecordGMS.Thickness_mm + " mm";
+			stringStructure = getRecordGMS.Select_the_number_of_Panels + " Panel " + getRecordGMS.Vertical_Placement + "V " + getRecordGMS.Foundation_Type + " Solution";
+			stringTotalPanels = " - " + getRecordGMS.Total_Panels + " Total Panels";
+			stringHeader = stringStructure + stringTotalPanels;
+			subformEntries = getRecordGMS.Components_Required;
+			stringNotes = stringNotes + stringHeader + ": \n" + stringPanels + "\n \n";
+		}
+		if(Solution == "Standard Carport Solution")
+		{
+			getRecordCRP = Standard_Carport_Solution[Quote_SQ_Number == getSQ];
+			stringPanels = getRecordCRP.Width + " x " + getRecordCRP.Length_field + " x " + getRecordCRP.Thickness_mm + " mm";
+			stringStructure = getRecordCRP.Panels_Table + " Panel " + getRecordCRP.Structure_Type;
+			stringTotalPanels = " - " + getRecordCRP.Total_Panels + " Total Panels";
+			stringHeader = stringStructure + stringTotalPanels;
+			subformEntries = getRecordCRP.Components_Required;
+			stringNotes = stringNotes + stringHeader + ": \n" + stringPanels + "\n \n";
+		}
+		if(Solution == "Cantilever Carport Solution")
+		{
+			getRecordCNTCRP = Cantilever_Carport_Solution[Quote_SQ_Number == getSQ];
+			stringPanels = getRecordCNTCRP.Width + " x " + getRecordCNTCRP.Length_field + " x " + getRecordCNTCRP.Thickness_mm + " mm";
+			stringStructure = getRecordCNTCRP.Panels_Table + " Panel " + getRecordCNTCRP.Structure_Type;
+			stringTotalPanels = " - " + getRecordCNTCRP.Total_Panels + " Total Panels";
+			stringHeader = stringStructure + stringTotalPanels;
+			subformEntries = getRecordCNTCRP.Components_Required;
+			stringNotes = stringNotes + stringHeader + ": \n" + stringPanels + "\n \n";
+		}
+		if(Solution == "Roof Mount Solution")
+		{
+			getRecordRMS = Roof_Mount_Solution[Quote_SQ_Number == getSQ];
+			stringPanels = getRecordRMS.Panel_Width + " x " + getRecordRMS.Panel_Length + " x " + getRecordRMS.Panel_Thickness + " mm";
+			stringStructure = getRecordRMS.Select_Roof + " Roof " + getRecordRMS.Number_of_Rows + " Row(s)";
+			stringHeader = stringStructure;
+			subformEntries = getRecordRMS.Components_Required;
+			stringNotes = stringNotes + stringHeader + ": \n" + stringPanels + "\n \n";
+		}
+		for each  item in subformEntries
+		{
+			itemMap = Map();
+			// 			getItem = if (Solution.contains("Ground"), getItem = GMS_Inventory[Code == item.Code], <failure_value> );
+			getItem = null;
+			if(Solution == "Ground Mount Solution")
+			{
+				getItem = GMS_Inventory[Code == item.Code];
+			}
+			else if(Solution == "Standard Carport Solution")
+			{
+				getItem = STD_CRP_Inventory[Code == item.Code];
+			}
+			else if(Solution == "Cantilever Carport Solution")
+			{
+				getItem = CNT_CRP_Inventory[Code == item.Code];
+			}
+			else if(Solution == "Roof Mount Solution")
+			{
+				getItem = RMS_Inventory[Code == item.Code];
+			}
+			getItemID = getItem.Item_ID;
+			// --------------- This section provides provisional Quantities to Fastesners. (FST...) in Component_ID required ----------------
+			if(Add_Provisions_to_Fasteners = True)
+			{
+				if(getItem.Component_ID.len() > 3 && getItem.Component_ID.left(3) == "FST")
+				{
+					vNumber = item.QTY + 4;
+					// Quantity + X where X is the least amount of additional Fasteners
+					vDivisor = 5;
+					// Quantities will be calculated in Multiples of 5 (6 -> 10, 20 -> 25)
+					// At this stage Deluge has no ceiling function as a multiple of more than 0 and no Mod function. Below is the math for each.
+					QTY = vNumber + vDivisor - 1 - (vNumber + vDivisor - 1 - vDivisor * ((vNumber + vDivisor - 1) / vDivisor).truncate(0));
+				}
+				else
+				{
+					QTY = item.QTY;
+				}
+			}
+			else
+			{
+				QTY = item.QTY;
+			}
+			// -----------------------------------------------------------------------------------------------------------------------------
+			itemMap.put("item_id",getItemID);
+			itemMap.put("header_name",stringHeader);
+			itemMap.put("quantity",QTY);
+			lineItem.add(itemMap);
+		}
+	}
+	dateField = zoho.currentdate;
+	validityDateField = dateField.addMonth(1);
+	estimate_data.put("line_items",lineItem);
+	estimate_data.put("date",dateField.toString("YYYY-MM-dd"));
+	estimate_data.put("expiry_date",validityDateField.toString("YYYY-MM-dd"));
+	estimate_data.put("reference_number","Zoho Creator Generated");
+	estimate_data.put("notes",stringNotes);
+	// Convert to JSON string
+	estimate_json = estimate_data.toString();
+	// Set up API URL
+	url = "https://www.zohoapis.com/books/v3/estimates?organization_id=" + organization_id;
+	// Set headers
+	headers = Map();
+	headers.put("Authorization","Zoho-oauthtoken " + access_token);
+	headers.put("Content-Type","application/json");
+	// 	Send POST request
+	response = invokeurl
+	[
+	url :url
+	type :POST
+	parameters:estimate_json
+	headers:headers
+	];
+	// -----------------------------------------------------------------------------------------------------------------------------
+}
